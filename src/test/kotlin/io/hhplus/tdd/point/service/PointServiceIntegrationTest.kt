@@ -3,16 +3,24 @@ package io.hhplus.tdd.point.service
 import io.hhplus.tdd.point.entity.TransactionType
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.tuple
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.ListableBeanFactory
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.test.context.TestConstructor
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 
 @SpringBootTest
 @TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 class PointServiceIntegrationTest (
     private var pointService: PointServiceImpl
 ){
+    @Autowired
+    private lateinit var listableBeanFactory: ListableBeanFactory
+
     @Nested
     inner class `포인트 충전 테스트` {
         @Test
@@ -111,6 +119,46 @@ class PointServiceIntegrationTest (
                     tuple(userId, TransactionType.CHARGE, beforePoint),
                     tuple(userId, TransactionType.USE, amount)
                 )
+        }
+    }
+
+    @Nested
+    inner class `동시성 테스트` {
+        inner class Batch(val type: TransactionType, val amount: Long)
+
+        @Test
+        fun `포인트 충전 테스트`(){
+            // given
+            val userId = 6L
+            val point = 100000L
+            val batch = listOf(
+                Batch(TransactionType.CHARGE, 1000L)
+                , Batch(TransactionType.USE, 500L)
+                , Batch(TransactionType.CHARGE, 4000L)
+                , Batch(TransactionType.USE, 1500L)
+            )
+            val countDownLatch = CountDownLatch(batch.size)
+            pointService.chargePoint(userId,point)
+            val resultPoint = point + batch.sumOf { if(it.type == TransactionType.CHARGE) it.amount else (it.amount * -1) }
+
+            // when
+            val executor = Executors.newFixedThreadPool(batch.size)
+            List(batch.size) {i -> executor.submit({
+                try {
+                    if (batch[i].type ==TransactionType.CHARGE)
+                        pointService.chargePoint(userId, batch[i].amount)
+                    else
+                        pointService.usePoint(userId, batch[i].amount)
+
+                }finally {
+                    countDownLatch.countDown()
+                }
+            })}
+            countDownLatch.await()
+
+            // then
+            val result = pointService.findUserPointByUserId(userId)
+            assertEquals(resultPoint, result.point)
         }
     }
 }
