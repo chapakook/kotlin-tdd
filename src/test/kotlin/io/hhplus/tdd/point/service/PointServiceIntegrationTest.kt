@@ -6,8 +6,6 @@ import org.assertj.core.api.Assertions.tuple
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import org.springframework.beans.factory.ListableBeanFactory
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.test.context.TestConstructor
 import java.util.concurrent.CountDownLatch
@@ -18,9 +16,6 @@ import java.util.concurrent.Executors
 class PointServiceIntegrationTest (
     private var pointService: PointServiceImpl
 ){
-    @Autowired
-    private lateinit var listableBeanFactory: ListableBeanFactory
-
     @Nested
     inner class `포인트 충전 테스트` {
         @Test
@@ -155,6 +150,7 @@ class PointServiceIntegrationTest (
                 }
             })}
             countDownLatch.await()
+            executor.shutdown()
 
             // then
             val result = pointService.findUserPointByUserId(userId)
