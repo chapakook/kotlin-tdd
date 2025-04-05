@@ -21,4 +21,9 @@ class ApiControllerAdvice : ResponseEntityExceptionHandler() {
             HttpStatus.INTERNAL_SERVER_ERROR,
         )
     }
+
+    @ExceptionHandler(IllegalArgumentException::class)
+    fun handleIllegalArgument(e: IllegalArgumentException): ResponseEntity<Map<String, String>> {
+        return ResponseEntity.badRequest().body(mapOf("error" to e.message!!))
+    }
 }

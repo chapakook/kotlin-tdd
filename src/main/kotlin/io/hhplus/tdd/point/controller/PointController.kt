@@ -1,12 +1,17 @@
-package io.hhplus.tdd.point
+package io.hhplus.tdd.point.controller
 
+import io.hhplus.tdd.point.entity.PointHistory
+import io.hhplus.tdd.point.entity.UserPoint
+import io.hhplus.tdd.point.service.PointServiceImpl
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/point")
-class PointController {
+class PointController (
+    private val pointService: PointServiceImpl
+){
     private val logger: Logger = LoggerFactory.getLogger(javaClass)
 
     /**
@@ -16,7 +21,8 @@ class PointController {
     fun point(
         @PathVariable id: Long,
     ): UserPoint {
-        return UserPoint(0, 0, 0)
+        require(id > 0) { "id must be positive" }
+        return pointService.findUserPointByUserId(id)
     }
 
     /**
@@ -26,7 +32,8 @@ class PointController {
     fun history(
         @PathVariable id: Long,
     ): List<PointHistory> {
-        return emptyList()
+        require(id > 0) { "id must be positive" }
+        return pointService.findPointHistoryByUserId(id)
     }
 
     /**
@@ -37,7 +44,8 @@ class PointController {
         @PathVariable id: Long,
         @RequestBody amount: Long,
     ): UserPoint {
-        return UserPoint(0, 0, 0)
+        require(id > 0) { "id must be positive" }
+        return pointService.chargePoint(id, amount)
     }
 
     /**
@@ -48,6 +56,7 @@ class PointController {
         @PathVariable id: Long,
         @RequestBody amount: Long,
     ): UserPoint {
-        return UserPoint(0, 0, 0)
+        require(id > 0) { "id must be positive" }
+        return pointService.usePoint(id, amount)
     }
 }
