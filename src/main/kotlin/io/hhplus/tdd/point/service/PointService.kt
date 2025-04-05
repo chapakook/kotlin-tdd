@@ -6,6 +6,9 @@ import io.hhplus.tdd.point.entity.PointHistory
 import io.hhplus.tdd.point.entity.TransactionType
 import io.hhplus.tdd.point.entity.UserPoint
 import org.springframework.stereotype.Service
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 interface PointService {
     fun findUserPointByUserId(userId: Long): UserPoint
@@ -19,6 +22,7 @@ class PointServiceImpl(
     private val userPointTable: UserPointTable,
     private val pointHistoryTable: PointHistoryTable,
 ) : PointService {
+    private val userLocks = ConcurrentHashMap<Long, ReentrantLock>()
 
     /**
      * 포인트 조회
@@ -45,11 +49,20 @@ class PointServiceImpl(
         require(userId > 0) { "userId must be positive: userId=$userId" }
         require(amount > 0) { "amount must be positive: amount=$amount" }
         require(amount <= 1000000){ "over the maximum single charge limit 1 million: amount=$amount" }
-        val target = userPointTable.selectById(userId)
-        require(target.point + amount <= 1000000){ "the maximum balance is 1 million: current point=${target.point}, charge amount=$amount" }
-        val result = userPointTable.insertOrUpdate(userId, target.point + amount)
-        pointHistoryTable.insert(result.id, amount, TransactionType.CHARGE, result.updateMillis)
-        return result
+        val lock = userLocks.computeIfAbsent(userId) { ReentrantLock() }
+        return lock.withLock {
+            try{
+                val target = userPointTable.selectById(userId)
+                require(target.point + amount <= 1000000){ "the maximum balance is 1 million: current point=${target.point}, charge amount=$amount" }
+                val result = userPointTable.insertOrUpdate(userId, target.point + amount)
+                pointHistoryTable.insert(result.id, amount, TransactionType.CHARGE, result.updateMillis)
+                result
+            }finally {
+                userLocks.remove(userId)
+            }
+        }
+
+
     }
 
     /**
@@ -62,11 +75,19 @@ class PointServiceImpl(
     override fun usePoint(userId: Long, amount: Long): UserPoint {
         require(userId > 0) { "userId must be positive: userId=$userId" }
         require(amount > 0) { "amount must be positive: amount=$amount" }
-        val target = userPointTable.selectById(userId)
-        require(target.point > 0) { "point must be positive: point=${target.point}" }
-        require(target.point >= amount) { "point must be more than or equal to amount: point=${target.point} amount=$amount" }
-        val result = userPointTable.insertOrUpdate(userId, target.point - amount)
-        pointHistoryTable.insert(result.id, amount, TransactionType.USE, result.updateMillis)
-        return result
+        val lock = userLocks.computeIfAbsent(userId) { ReentrantLock() }
+        return lock.withLock {
+            try{
+                val target = userPointTable.selectById(userId)
+                require(target.point > 0) { "point must be positive: point=${target.point}" }
+                require(target.point >= amount) { "point must be more than or equal to amount: point=${target.point} amount=$amount" }
+                val result = userPointTable.insertOrUpdate(userId, target.point - amount)
+                pointHistoryTable.insert(result.id, amount, TransactionType.USE, result.updateMillis)
+                result
+            }finally {
+                userLocks.remove(userId)
+            }
+        }
+
     }
 }
